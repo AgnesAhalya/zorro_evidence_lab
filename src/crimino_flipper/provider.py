@@ -180,3 +180,100 @@ class AdaptionProvider:
             latency_ms=latency,
             raw=raw,
         )
+
+
+class OpenRouterProvider:
+    """OpenRouter's OpenAI-compatible chat-completions provider."""
+
+    def __init__(
+        self,
+        timeout_seconds: float = 300,
+        max_retries: int = 0,
+        rate_limit_wait_seconds: float = 90,
+        base_url: str = "https://openrouter.ai/api/v1",
+    ) -> None:
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is not set")
+        try:
+            import httpx
+        except ImportError as exc:
+            raise RuntimeError("Install the OpenRouter dependency with: pip install -e '.[openrouter]'") from exc
+        self.httpx = httpx
+        self.api_key = api_key
+        self.timeout_seconds = timeout_seconds
+        self.max_retries = max_retries
+        self.rate_limit_wait_seconds = rate_limit_wait_seconds
+        self.base_url = base_url.rstrip("/")
+
+    def create_response(self, request: ModelRequest) -> ModelResult:
+        started = time.perf_counter()
+        messages = [
+            {"role": "system", "content": request.instructions},
+            *list(request.input),
+        ]
+        payload = {
+            "model": request.model,
+            "messages": messages,
+            "temperature": request.temperature,
+            "max_tokens": request.max_output_tokens,
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/AgnesAhalya/zorro_evidence_lab",
+            "X-Title": "Zorro Evidence Lab",
+        }
+        with self.httpx.Client(timeout=self.timeout_seconds) as client:
+            for attempt in range(self.max_retries + 1):
+                try:
+                    response = client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers=headers,
+                        json=payload,
+                    )
+                    response.raise_for_status()
+                    raw = response.json()
+                    break
+                except Exception as exc:
+                    response = getattr(exc, "response", None)
+                    code = getattr(response, "status_code", None)
+                    retryable = (
+                        code == 429
+                        or (code is not None and code >= 500)
+                        or isinstance(exc, self.httpx.TimeoutException)
+                        or isinstance(exc, self.httpx.NetworkError)
+                    )
+                    if not retryable or attempt >= self.max_retries:
+                        raise
+                    if code == 429:
+                        delay = _retry_after_seconds(exc)
+                        delay = max(
+                            delay if delay is not None else self.rate_limit_wait_seconds,
+                            self.rate_limit_wait_seconds,
+                        )
+                        print(
+                            f"[retry] OpenRouter rate limit; waiting {delay:.0f}s "
+                            f"before retry {attempt + 1}/{self.max_retries}",
+                            flush=True,
+                        )
+                    else:
+                        delay = min(2 ** attempt, 30)
+                    time.sleep(delay)
+
+        choice = raw["choices"][0]
+        message = choice["message"].get("content", "")
+        if isinstance(message, list):
+            message = "".join(
+                item.get("text", "") for item in message if isinstance(item, dict)
+            )
+        usage = raw.get("usage") or {}
+        return ModelResult(
+            response_id=raw.get("id", "openrouter_response"),
+            output_text=message,
+            model=raw.get("model", request.model),
+            input_tokens=usage.get("prompt_tokens", 0),
+            output_tokens=usage.get("completion_tokens", 0),
+            latency_ms=round((time.perf_counter() - started) * 1000),
+            raw=raw,
+        )

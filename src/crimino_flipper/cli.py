@@ -10,7 +10,7 @@ from .controller import PilotRunner
 from .data_loaders import load_all_cases
 from .manifest import build_tasks, choose_pilot_cases, write_manifests
 from .prompts import PromptBundle
-from .provider import AdaptionProvider, LocalSimulationProvider
+from .provider import AdaptionProvider, LocalSimulationProvider, OpenRouterProvider
 
 
 DEFAULT_CONFIG = "config/pilot.json"
@@ -112,7 +112,7 @@ def main() -> None:
     simulate.add_argument("--manifest", default=DEFAULT_PRIVATE_MANIFEST)
     simulate.add_argument("--artifacts", default="pilot/artifacts/simulation")
 
-    live = sub.add_parser("run-live", help="Run paid Adaption calls")
+    live = sub.add_parser("run-live", help="Run paid provider calls")
     live.add_argument("--manifest", default=DEFAULT_PRIVATE_MANIFEST)
     live.add_argument("--artifacts", default="pilot/artifacts/adaption")
     live.add_argument(
@@ -144,11 +144,21 @@ def main() -> None:
         if not args.allow_paid_calls:
             parser.error("run-live requires --allow-paid-calls")
         execution = config.get("execution", {})
-        provider = AdaptionProvider(
-            timeout_seconds=execution.get("request_timeout_seconds", 300),
-            max_retries=execution.get("max_retries", 0),
-            rate_limit_wait_seconds=execution.get("rate_limit_wait_seconds", 90),
-        )
+        provider_args = {
+            "timeout_seconds": execution.get("request_timeout_seconds", 300),
+            "max_retries": execution.get("max_retries", 0),
+            "rate_limit_wait_seconds": execution.get("rate_limit_wait_seconds", 90),
+        }
+        provider_name = execution.get("provider", "adaption")
+        if provider_name == "openrouter":
+            provider = OpenRouterProvider(
+                **provider_args,
+                base_url=execution.get("base_url", "https://openrouter.ai/api/v1"),
+            )
+        elif provider_name == "adaption":
+            provider = AdaptionProvider(**provider_args)
+        else:
+            parser.error(f"Unsupported live provider: {provider_name}")
     runner = PilotRunner(config, manifest, prompts, provider, args.artifacts)
     print(json.dumps(runner.run(), indent=2))
 

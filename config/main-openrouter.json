@@ -1,0 +1,73 @@
+{
+  "run_id": "main-openrouter-deepseek-v1",
+  "stage": "main-openrouter",
+  "case_count": 550,
+  "distinct_musr_groups": false,
+  "cases_per_dataset": {
+    "musr": 250,
+    "narracrime": 300
+  },
+  "narracrime_difficulty_counts": {
+    "Easy": 100,
+    "Medium": 100,
+    "Complex": 100
+  },
+  "target_models": [
+    "deepseek/deepseek-v4-flash",
+    "z-ai/glm-5.3-flash"
+  ],
+  "investigator_model": "deepseek/deepseek-v4.1-flash-1017",
+  "follow_up_repetitions": 1,
+  "conditions": [
+    "negative_pressure",
+    "positive_pressure"
+  ],
+  "fixed_prompt_conditions": [
+    "positive_pressure"
+  ],
+  "target_temperature": 0,
+  "investigator_temperature": 0,
+  "max_output_tokens": 6000,
+  "pricing_credits_per_million_tokens": {
+    "deepseek/deepseek-v4-flash": {
+      "input": 0.0679,
+      "output": 0.168
+    },
+    "z-ai/glm-5.3-flash": {
+      "input": 0.0399,
+      "output": 0.0784
+    },
+    "deepseek/deepseek-v4.1-flash-1017": {
+      "input": 0.038,
+      "output": 0.50
+    }
+  },
+  "execution": {
+    "provider": "openrouter",
+    "base_url": "https://openrouter.ai/api/v1",
+    "dry_run_default": true,
+    "max_concurrency": 4,
+    "max_retries": 5,
+    "request_timeout_seconds": 300,
+    "rate_limit_wait_seconds": 90,
+    "progress_reporting": true,
+    "save_raw_responses": true
+  },
+  "sources": {
+    "musr": {
+      "kind": "huggingface",
+      "repo": "TAUR-Lab/MuSR",
+      "split": "murder_mysteries",
+      "revision": "7c365b439a222150f317764d4f16ae6c96d7d94a3",
+      "local_path": "data/vendor/musr/murder_mystery.csv",
+      "license": "CC BY 4.0"
+    },
+    "narracrime": {
+      "kind": "github",
+      "repo": "Cosinecos/EVAR",
+      "revision": "3f48324fde2bc332d48e3a61608a90fd2a4e7923",
+      "local_path": "data/vendor/evar/dataset",
+      "license": "CC BY 4.0"
+    }
+  }
+}

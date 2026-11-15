@@ -25,8 +25,10 @@ jobs:
       - name: Validate configurations
         run: |
           python -m crimino_flipper.cli --config config/pilot.json show-plan
+          python -m crimino_flipper.cli --config config/pilot-openrouter.json show-plan
           python -m crimino_flipper.cli --config config/pilot-gitlab.json show-plan
           python -m crimino_flipper.cli --config config/main.json show-plan
+          python -m crimino_flipper.cli --config config/main-openrouter.json show-plan
       - name: Run offline pilot simulation twice
         run: |
           python -m crimino_flipper.cli --config config/pilot.json build-manifest
@@ -59,7 +61,9 @@ jobs:
       - name: Check container plans
         run: |
           docker run --rm zorro-evidence-lab:ci python -m crimino_flipper.cli --config config/pilot.json show-plan
+          docker run --rm zorro-evidence-lab:ci python -m crimino_flipper.cli --config config/pilot-openrouter.json show-plan
           docker run --rm zorro-evidence-lab:ci python -m crimino_flipper.cli --config config/pilot-gitlab.json show-plan
           docker run --rm zorro-evidence-lab:ci python -m crimino_flipper.cli --config config/main.json show-plan
+          docker run --rm zorro-evidence-lab:ci python -m crimino_flipper.cli --config config/main-openrouter.json show-plan
       - name: Run container tests
         run: docker run --rm zorro-evidence-lab:ci python -m unittest discover -s tests -v

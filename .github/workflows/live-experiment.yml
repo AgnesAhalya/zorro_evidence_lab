@@ -4,14 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: "Choose the 10-case pilot or the 550-case main run"
+        description: "Choose the OpenRouter pilot/main or Adaption run"
         required: true
         type: choice
         options:
           - pilot
+          - pilot-openrouter
           - main
+          - main-openrouter
       allow_paid_calls:
-        description: "Explicitly authorize paid Adaption calls"
+        description: "Explicitly authorize paid provider calls"
         required: true
         type: boolean
         default: false
@@ -28,6 +30,7 @@ jobs:
     environment: ${{ inputs.scope }}
     env:
       ADAPTION_API_KEY: ${{ secrets.ADAPTION_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - name: Prepare pinned datasets
@@ -36,7 +39,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install live dependencies
-        run: python -m pip install -e '.[live]'
+        run: python -m pip install -e '.[live,openrouter]'
       - name: Run selected live experiment
         shell: bash
         run: |
@@ -46,11 +49,21 @@ jobs:
             public_manifest="pilot/manifest.github.pilot.public.json"
             private_manifest="pilot/manifest.github.pilot.private.json"
             artifacts="pilot/artifacts/adaption/github-pilot"
-          else
+          elif [[ "${{ inputs.scope }}" == "pilot-openrouter" ]]; then
+            config="config/pilot-openrouter.json"
+            public_manifest="pilot/manifest.github.pilot-openrouter.public.json"
+            private_manifest="pilot/manifest.github.pilot-openrouter.private.json"
+            artifacts="pilot/artifacts/openrouter/github-pilot-openrouter"
+          elif [[ "${{ inputs.scope }}" == "main" ]]; then
             config="config/main.json"
             public_manifest="pilot/manifest.github.main.public.json"
             private_manifest="pilot/manifest.github.main.private.json"
             artifacts="pilot/artifacts/adaption/github-main"
+          else
+            config="config/main-openrouter.json"
+            public_manifest="pilot/manifest.github.main-openrouter.public.json"
+            private_manifest="pilot/manifest.github.main-openrouter.private.json"
+            artifacts="pilot/artifacts/adaption/github-main-openrouter"
           fi
           python -m crimino_flipper.cli --config "$config" show-plan
           python -m crimino_flipper.cli --config "$config" build-manifest \
@@ -64,8 +77,8 @@ jobs:
           name: github-live-${{ inputs.scope }}
           path: |
             pilot/manifest.github.*.public.json
-            pilot/artifacts/adaption/github-${{ inputs.scope }}/run_summary.json
-            pilot/artifacts/adaption/github-${{ inputs.scope }}/results_summary.md
-            pilot/artifacts/adaption/github-${{ inputs.scope }}/run_status.json
-            pilot/artifacts/adaption/github-${{ inputs.scope }}/analysis_text/
+            pilot/artifacts/**/run_summary.json
+            pilot/artifacts/**/results_summary.md
+            pilot/artifacts/**/run_status.json
+            pilot/artifacts/**/analysis_text/
           if-no-files-found: ignore
