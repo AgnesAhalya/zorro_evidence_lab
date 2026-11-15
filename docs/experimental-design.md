@@ -153,7 +153,7 @@ The main components are:
 - `storage.py`: writes atomic artifacts, local cache entries, and separate raw exports.
 - `scoring.py`: computes pilot metrics from valid target responses.
 
-The live Adaption client uses the configured timeout and retry values in the JSON configuration. The provider wrapper performs up to the configured number of retries for 429 and 5xx failures. For 429 responses it honors the HTTP `Retry-After` header and, when the header is absent, extracts a message such as `retry after 60 seconds` from the error body before waiting. Provider exceptions, including exhausted rate limits and timeouts, are saved as error artifacts and marked invalid so the complete run summary can still be produced.
+The live Adaption client uses the configured timeout and retry values in the JSON configuration. The provider wrapper performs up to five retries by default for 429 and 5xx failures. Rate-limit waits default to 90 seconds; the configured wait is used even when the provider requests only 60 seconds. Each rate-limit wait is printed in the run log. Provider exceptions, including exhausted rate limits and timeouts, are saved as error artifacts and marked invalid so the complete run summary can still be produced.
 
 The live command requires the explicit paid-call flag:
 

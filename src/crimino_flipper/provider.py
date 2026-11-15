@@ -119,7 +119,12 @@ class LocalSimulationProvider:
 
 
 class AdaptionProvider:
-    def __init__(self, timeout_seconds: float = 300, max_retries: int = 0) -> None:
+    def __init__(
+        self,
+        timeout_seconds: float = 300,
+        max_retries: int = 0,
+        rate_limit_wait_seconds: float = 90,
+    ) -> None:
         if not os.getenv("ADAPTION_API_KEY"):
             raise RuntimeError("ADAPTION_API_KEY is not set")
         try:
@@ -127,6 +132,7 @@ class AdaptionProvider:
         except ImportError as exc:
             raise RuntimeError("Install the live dependency with: pip install -e '.[live]'") from exc
         self.max_retries = max_retries
+        self.rate_limit_wait_seconds = rate_limit_wait_seconds
         # Keep retries here so rate-limit messages without an HTTP header can
         # still be honored from the provider's error body.
         self.client = Adaption(timeout=timeout_seconds, max_retries=0)
@@ -149,7 +155,14 @@ class AdaptionProvider:
                 if code == 429:
                     delay = _retry_after_seconds(exc)
                     if delay is None:
-                        delay = min(2 ** attempt, 60)
+                        delay = self.rate_limit_wait_seconds
+                    else:
+                        delay = max(delay, self.rate_limit_wait_seconds)
+                    print(
+                        f"[retry] rate limit response; waiting {delay:.0f}s "
+                        f"before retry {attempt + 1}/{self.max_retries}",
+                        flush=True,
+                    )
                 elif code is not None:
                     delay = min(2 ** attempt, 30)
                 else:

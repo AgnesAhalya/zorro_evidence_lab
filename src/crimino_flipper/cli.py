@@ -147,6 +147,7 @@ def main() -> None:
         provider = AdaptionProvider(
             timeout_seconds=execution.get("request_timeout_seconds", 300),
             max_retries=execution.get("max_retries", 0),
+            rate_limit_wait_seconds=execution.get("rate_limit_wait_seconds", 90),
         )
     runner = PilotRunner(config, manifest, prompts, provider, args.artifacts)
     print(json.dumps(runner.run(), indent=2))
