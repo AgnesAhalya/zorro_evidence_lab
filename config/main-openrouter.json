@@ -46,7 +46,7 @@
     "provider": "openrouter",
     "base_url": "https://openrouter.ai/api/v1",
     "dry_run_default": true,
-    "max_concurrency": 4,
+    "max_concurrency": 1,
     "max_retries": 5,
     "validation_retries": 3,
     "validation_retry_wait_seconds": 60,

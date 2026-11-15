@@ -54,6 +54,14 @@ def choose_pilot_cases(
     return sorted(selected, key=lambda c: c.case_id)
 
 
+def select_case_shard(cases: Iterable[Case], shard_index: int = 0, shard_count: int = 1) -> list[Case]:
+    """Select a deterministic, non-overlapping shard from an ordered case set."""
+    if shard_count < 1 or not 0 <= shard_index < shard_count:
+        raise ValueError("shard_index must be in [0, shard_count) and shard_count must be positive")
+    ordered = list(cases)
+    return ordered[shard_index::shard_count]
+
+
 def build_tasks(cases: Iterable[Case], config: dict) -> list[PilotTask]:
     tasks: list[PilotTask] = []
     for case in cases:

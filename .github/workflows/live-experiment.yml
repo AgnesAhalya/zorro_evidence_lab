@@ -24,7 +24,7 @@ permissions:
 jobs:
   live:
     name: Run ${{ inputs.scope }} experiment
-    if: ${{ inputs.allow_paid_calls == true }}
+    if: ${{ inputs.allow_paid_calls == true && inputs.scope != 'pilot-openrouter' && inputs.scope != 'main-openrouter' }}
     runs-on: ubuntu-latest
     timeout-minutes: 1440
     environment: ${{ inputs.scope }}
@@ -82,3 +82,102 @@ jobs:
             pilot/artifacts/**/run_status.json
             pilot/artifacts/**/analysis_text/
           if-no-files-found: ignore
+
+  live-openrouter-sharded:
+    name: Run ${{ inputs.scope }} shard ${{ matrix.shard_index }}
+    if: ${{ inputs.allow_paid_calls == true && (inputs.scope == 'pilot-openrouter' || inputs.scope == 'main-openrouter') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 1440
+    environment: ${{ inputs.scope }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard_index: [0, 1, 2, 3, 4]
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned datasets
+        run: bash scripts/prepare-data.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package
+        run: python -m pip install -e .
+      - name: Install live dependencies
+        run: python -m pip install -e '.[live,openrouter]'
+      - name: Run OpenRouter shard
+        shell: bash
+        env:
+          SHARD_INDEX: ${{ matrix.shard_index }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.scope }}" == "pilot-openrouter" ]]; then
+            config="config/pilot-openrouter.json"
+            prefix="pilot-openrouter"
+            artifacts="pilot/artifacts/openrouter/github-pilot-openrouter-v4/shard-${SHARD_INDEX}"
+          else
+            config="config/main-openrouter.json"
+            prefix="main-openrouter"
+            artifacts="pilot/artifacts/openrouter/github-main-openrouter-v4/shard-${SHARD_INDEX}"
+          fi
+          public_manifest="pilot/manifest.github.${prefix}.shard-${SHARD_INDEX}.public.json"
+          private_manifest="pilot/manifest.github.${prefix}.shard-${SHARD_INDEX}.private.json"
+          python -m crimino_flipper.cli --config "$config" show-plan \
+            --shard-index "$SHARD_INDEX" --shard-count 5
+          python -m crimino_flipper.cli --config "$config" build-manifest \
+            --public "$public_manifest" --private "$private_manifest" \
+            --shard-index "$SHARD_INDEX" --shard-count 5
+          python -m crimino_flipper.cli --config "$config" run-live \
+            --manifest "$private_manifest" --artifacts "$artifacts" \
+            --shard-index "$SHARD_INDEX" --shard-count 5 --allow-paid-calls
+      - name: Upload shard results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-live-${{ inputs.scope }}-shard-${{ matrix.shard_index }}
+          path: |
+            pilot/manifest.github.*.shard-${{ matrix.shard_index }}.*.json
+            pilot/artifacts/**/run_summary.json
+            pilot/artifacts/**/results_summary.md
+            pilot/artifacts/**/run_status.json
+            pilot/artifacts/**/analysis_text/
+          if-no-files-found: ignore
+
+  merge-openrouter-shards:
+    name: Merge ${{ inputs.scope }} shards
+    needs: live-openrouter-sharded
+    if: ${{ always() && needs.live-openrouter-sharded.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.scope }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package
+        run: python -m pip install -e .
+      - name: Download shard results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: github-live-${{ inputs.scope }}-shard-*
+          merge-multiple: true
+          path: shard-results
+      - name: Merge shard summaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.scope }}" == "pilot-openrouter" ]]; then
+            config="config/pilot-openrouter.json"
+          else
+            config="config/main-openrouter.json"
+          fi
+          python scripts/merge-sharded-results.py \
+            --config "$config" \
+            --summary-root shard-results/pilot/artifacts \
+            --output-dir merged-results
+      - name: Upload merged results
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-live-${{ inputs.scope }}-merged
+          path: merged-results/

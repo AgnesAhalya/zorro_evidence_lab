@@ -8,7 +8,7 @@ from pathlib import Path
 from .config import load_config
 from .controller import PilotRunner
 from .data_loaders import load_all_cases
-from .manifest import build_tasks, choose_pilot_cases, write_manifests
+from .manifest import build_tasks, choose_pilot_cases, select_case_shard, write_manifests
 from .prompts import PromptBundle
 from .provider import AdaptionProvider, LocalSimulationProvider, OpenRouterProvider
 
@@ -40,7 +40,13 @@ def show_plan(config: dict) -> dict:
     }
 
 
-def build_manifest(config: dict, public_path: str, private_path: str) -> dict:
+def build_manifest(
+    config: dict,
+    public_path: str,
+    private_path: str,
+    shard_index: int = 0,
+    shard_count: int = 1,
+) -> dict:
     all_cases = load_all_cases(config)
     selected = choose_pilot_cases(
         all_cases,
@@ -48,6 +54,8 @@ def build_manifest(config: dict, public_path: str, private_path: str) -> dict:
         config["narracrime_difficulty_counts"],
         config.get("distinct_musr_groups", True),
     )
+    total_case_count = len(selected)
+    selected = select_case_shard(selected, shard_index, shard_count)
     tasks = build_tasks(selected, config)
     metadata = {
         "run_id": config["run_id"],
@@ -57,6 +65,9 @@ def build_manifest(config: dict, public_path: str, private_path: str) -> dict:
             "NarraCrime difficulty strata"
         ),
         "case_count": len(selected),
+        "total_case_count": total_case_count,
+        "shard_index": shard_index,
+        "shard_count": shard_count,
         "target_task_count": len(tasks),
         "follow_up_repetitions": config.get("follow_up_repetitions", 0),
         "conditions": list(config["conditions"]),
@@ -73,7 +84,9 @@ def build_manifest(config: dict, public_path: str, private_path: str) -> dict:
     return metadata
 
 
-def manifest_matches_config(config: dict, manifest_path: str | Path) -> bool:
+def manifest_matches_config(
+    config: dict, manifest_path: str | Path, shard_index: int = 0, shard_count: int = 1
+) -> bool:
     path = Path(manifest_path)
     if not path.exists():
         return False
@@ -87,7 +100,9 @@ def manifest_matches_config(config: dict, manifest_path: str | Path) -> bool:
     }
     return (
         metadata.get("run_id") == config["run_id"]
-        and metadata.get("case_count") == config["case_count"]
+        and metadata.get("total_case_count", metadata.get("case_count")) == config["case_count"]
+        and metadata.get("shard_index", 0) == shard_index
+        and metadata.get("shard_count", 1) == shard_count
         and metadata.get("follow_up_repetitions", 0)
         == config.get("follow_up_repetitions", 0)
         and metadata.get("conditions") == list(config["conditions"])
@@ -102,19 +117,27 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Prepare and run a configured case evaluation.")
     parser.add_argument("--config", default=DEFAULT_CONFIG)
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("show-plan", help="Show expected call counts")
+    plan = sub.add_parser("show-plan", help="Show expected call counts")
+    plan.add_argument("--shard-index", type=int, default=0)
+    plan.add_argument("--shard-count", type=int, default=1)
 
     build = sub.add_parser("build-manifest", help="Build public and private pilot manifests")
     build.add_argument("--public", default=DEFAULT_PUBLIC_MANIFEST)
     build.add_argument("--private", default=DEFAULT_PRIVATE_MANIFEST)
+    build.add_argument("--shard-index", type=int, default=0)
+    build.add_argument("--shard-count", type=int, default=1)
 
     simulate = sub.add_parser("simulate", help="Run the full local simulation")
     simulate.add_argument("--manifest", default=DEFAULT_PRIVATE_MANIFEST)
     simulate.add_argument("--artifacts", default="pilot/artifacts/simulation")
+    simulate.add_argument("--shard-index", type=int, default=0)
+    simulate.add_argument("--shard-count", type=int, default=1)
 
     live = sub.add_parser("run-live", help="Run paid provider calls")
     live.add_argument("--manifest", default=DEFAULT_PRIVATE_MANIFEST)
     live.add_argument("--artifacts", default="pilot/artifacts/adaption")
+    live.add_argument("--shard-index", type=int, default=0)
+    live.add_argument("--shard-count", type=int, default=1)
     live.add_argument(
         "--allow-paid-calls",
         action="store_true",
@@ -124,19 +147,37 @@ def main() -> None:
     config = load_config(args.config)
 
     if args.command == "show-plan":
-        print(json.dumps(show_plan(config), indent=2))
+        plan = show_plan(config)
+        if args.shard_count > 1:
+            cases = (config["case_count"] + args.shard_count - 1) // args.shard_count
+            plan["cases"] = cases
+            plan["target_model_calls"] = cases * len(config["target_models"]) * (
+                1 + config.get("follow_up_repetitions", 0) * len(config["conditions"])
+            )
+            plan["investigator_calls"] = cases * sum(
+                condition not in set(config.get("fixed_prompt_conditions", []))
+                for condition in config["conditions"]
+            ) if config.get("follow_up_repetitions", 0) > 0 else 0
+            plan["total_calls"] = plan["target_model_calls"] + plan["investigator_calls"]
+            plan["shard_index"] = args.shard_index
+            plan["shard_count"] = args.shard_count
+        print(json.dumps(plan, indent=2))
         return
     if args.command == "build-manifest":
-        print(json.dumps(build_manifest(config, args.public, args.private), indent=2))
+        print(json.dumps(build_manifest(
+            config, args.public, args.private, args.shard_index, args.shard_count
+        ), indent=2))
         return
 
     manifest = Path(args.manifest)
-    if not manifest_matches_config(config, manifest):
+    if not manifest_matches_config(config, manifest, args.shard_index, args.shard_count):
         print(
             f"Manifest {manifest} is missing or stale; rebuilding it from the active config.",
             file=sys.stderr,
         )
-        build_manifest(config, DEFAULT_PUBLIC_MANIFEST, str(manifest))
+        build_manifest(
+            config, DEFAULT_PUBLIC_MANIFEST, str(manifest), args.shard_index, args.shard_count
+        )
     prompts = PromptBundle.from_directory("prompts")
     if args.command == "simulate":
         provider = LocalSimulationProvider()

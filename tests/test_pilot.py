@@ -7,7 +7,7 @@ from pathlib import Path
 from crimino_flipper.config import load_config
 from crimino_flipper.controller import PilotRunner
 from crimino_flipper.data_loaders import load_all_cases
-from crimino_flipper.manifest import read_private_manifest
+from crimino_flipper.manifest import read_private_manifest, select_case_shard
 from crimino_flipper.models import ModelRequest, ModelResult
 from crimino_flipper.prompts import PromptBundle
 from crimino_flipper.provider import LocalSimulationProvider, _retry_after_seconds
@@ -40,6 +40,13 @@ class PilotSetupTests(unittest.TestCase):
         self.assertEqual(counts, {"musr": 250, "narracrime": 300})
         difficulties = Counter(case.difficulty for case in cases if case.dataset == "narracrime")
         self.assertEqual(difficulties, {"Easy": 100, "Medium": 100, "Complex": 100})
+
+    def test_five_shards_cover_all_cases_without_overlap(self) -> None:
+        cases = load_all_cases(load_config(ROOT / "config/main-openrouter.json"))
+        shards = [select_case_shard(cases, index, 5) for index in range(5)]
+        self.assertEqual(sum(len(shard) for shard in shards), len(cases))
+        self.assertEqual(len({case.case_id for shard in shards for case in shard}), len(cases))
+        self.assertTrue(all(len(shard) == 110 for shard in shards))
 
     def test_manifest_counts_and_strata(self) -> None:
         cases, tasks, metadata = read_private_manifest(ROOT / "pilot/manifest.private.json")
