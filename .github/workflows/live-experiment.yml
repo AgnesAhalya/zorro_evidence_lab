@@ -1,0 +1,69 @@
+name: Zorro Evidence Lab Live Experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Choose the 10-case pilot or the 550-case main run"
+        required: true
+        type: choice
+        options:
+          - pilot
+          - main
+      allow_paid_calls:
+        description: "Explicitly authorize paid Adaption calls"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: Run ${{ inputs.scope }} experiment
+    if: ${{ inputs.allow_paid_calls == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 1440
+    environment: ${{ inputs.scope }}
+    env:
+      ADAPTION_API_KEY: ${{ secrets.ADAPTION_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install live dependencies
+        run: python -m pip install -e '.[live]'
+      - name: Run selected live experiment
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.scope }}" == "pilot" ]]; then
+            config="config/pilot.json"
+            public_manifest="pilot/manifest.github.pilot.public.json"
+            private_manifest="pilot/manifest.github.pilot.private.json"
+            artifacts="pilot/artifacts/adaption/github-pilot"
+          else
+            config="config/main.json"
+            public_manifest="pilot/manifest.github.main.public.json"
+            private_manifest="pilot/manifest.github.main.private.json"
+            artifacts="pilot/artifacts/adaption/github-main"
+          fi
+          python -m crimino_flipper.cli --config "$config" show-plan
+          python -m crimino_flipper.cli --config "$config" build-manifest \
+            --public "$public_manifest" --private "$private_manifest"
+          python -m crimino_flipper.cli --config "$config" run-live \
+            --manifest "$private_manifest" --artifacts "$artifacts" --allow-paid-calls
+      - name: Upload live results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-live-${{ inputs.scope }}
+          path: |
+            pilot/manifest.github.*.public.json
+            pilot/artifacts/adaption/github-${{ inputs.scope }}/run_summary.json
+            pilot/artifacts/adaption/github-${{ inputs.scope }}/results_summary.md
+            pilot/artifacts/adaption/github-${{ inputs.scope }}/run_status.json
+            pilot/artifacts/adaption/github-${{ inputs.scope }}/analysis_text/
+          if-no-files-found: ignore
