@@ -55,7 +55,7 @@
     "narracrime": {
       "kind": "github",
       "repo": "Cosinecos/EVAR",
-      "revision": "f48324fde2bc332d48e3a61608a90fd2a4e7923",
+      "revision": "3f48324fde2bc332d48e3a61608a90fd2a4e7923",
       "local_path": "data/vendor/evar/dataset",
       "license": "CC BY 4.0"
     }

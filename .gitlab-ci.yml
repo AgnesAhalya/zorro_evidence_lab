@@ -17,6 +17,8 @@ pilot-validation:
   stage: validate
   image: python:3.12-slim
   before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git bash
+    - bash scripts/prepare-data.sh
     - python -m pip install --upgrade pip
     - python -m pip install -e .
   script:
@@ -37,6 +39,8 @@ main-plan-validation:
   stage: validate
   image: python:3.12-slim
   before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git bash
+    - bash scripts/prepare-data.sh
     - python -m pip install --upgrade pip
     - python -m pip install -e .
   script:
@@ -60,6 +64,8 @@ container-validation:
     DOCKER_TLS_VERIFY: "1"
     DOCKER_CERT_PATH: "/certs/client"
   script:
+    - apk add --no-cache bash git
+    - bash scripts/prepare-data.sh
     - docker build --pull --tag "$DOCKER_IMAGE_SHA" .
     - docker run --rm "$DOCKER_IMAGE_SHA" python -m crimino_flipper.cli --config config/pilot.json show-plan
     - docker run --rm "$DOCKER_IMAGE_SHA" python -m crimino_flipper.cli --config config/pilot-gitlab.json show-plan
@@ -92,6 +98,8 @@ pilot-live:
   image: python:3.12-slim
   when: manual
   before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git bash
+    - bash scripts/prepare-data.sh
     - python -m pip install --upgrade pip
     - python -m pip install -e '.[live]'
   script:
@@ -110,6 +118,8 @@ main-live:
   image: python:3.12-slim
   when: manual
   before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git bash
+    - bash scripts/prepare-data.sh
     - python -m pip install --upgrade pip
     - python -m pip install -e '.[live]'
   script:

@@ -27,6 +27,8 @@ See [`pilot/README.md`](pilot/README.md) for live-run instructions and artifact 
 
 The 10-case local pilot is configured in `config/pilot.json`. GitLab validation and its manual pilot job use `config/pilot-gitlab.json` with 20 cases. The full 550-case experiment is configured separately in `config/main.json`. Paid calls are not part of automatic CI validation.
 
+GitHub Actions provides the same flow through `.github/workflows/ci.yml`. Its live workflow is manual only: dispatch `.github/workflows/live-experiment.yml`, choose `pilot` or `main`, and set `allow_paid_calls` to `true`. The protected `ADAPTION_API_KEY` GitHub secret is required for live runs.
+
 ## Docker and GitLab
 
 The entire setup can run inside Docker:

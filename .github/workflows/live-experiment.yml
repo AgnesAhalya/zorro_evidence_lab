@@ -30,6 +30,8 @@ jobs:
       ADAPTION_API_KEY: ${{ secrets.ADAPTION_API_KEY }}
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare pinned datasets
+        run: bash scripts/prepare-data.sh
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
