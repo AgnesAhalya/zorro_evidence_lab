@@ -1,0 +1,13 @@
+.git
+.gitlab
+.env
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.DS_Store
+pilot/artifacts/adaption
+pilot/artifacts/archive
+data/vendor/musr/.git
+data/vendor/evar/.git

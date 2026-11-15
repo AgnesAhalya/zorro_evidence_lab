@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: crimino-flipper
+Version: 0.1.0
+Summary: Pilot setup for a realistic investigative decision study
+Requires-Python: >=3.11
+Provides-Extra: live
+Requires-Dist: adaption==0.19.0; extra == "live"
+Requires-Dist: pydantic==2.14.3; extra == "live"

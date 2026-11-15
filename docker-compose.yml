@@ -1,0 +1,32 @@
+services:
+  plan:
+    build:
+      context: .
+    image: zorro-evidence-lab:local
+    command: ["python", "-m", "crimino_flipper.cli", "show-plan"]
+
+  simulate:
+    build:
+      context: .
+    image: zorro-evidence-lab:local
+    command: ["python", "-m", "crimino_flipper.cli", "simulate"]
+    volumes:
+      - ./pilot/artifacts:/app/pilot/artifacts
+
+  test:
+    build:
+      context: .
+    image: zorro-evidence-lab:local
+    command: ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]
+
+  adaption-pilot:
+    build:
+      context: .
+    image: zorro-evidence-lab:local
+    profiles: ["live"]
+    command:
+      ["python", "-m", "crimino_flipper.cli", "run-live", "--allow-paid-calls"]
+    environment:
+      ADAPTION_API_KEY: ${ADAPTION_API_KEY:-}
+    volumes:
+      - ./pilot/artifacts:/app/pilot/artifacts

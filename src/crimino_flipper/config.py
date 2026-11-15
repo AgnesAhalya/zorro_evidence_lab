@@ -1,0 +1,12 @@
+import json
+from pathlib import Path
+from typing import Any
+
+
+def load_config(path: str | Path) -> dict[str, Any]:
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def load_prompt(path: str | Path) -> str:
+    return Path(path).read_text(encoding="utf-8").strip()
+

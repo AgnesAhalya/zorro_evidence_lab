@@ -1,0 +1,24 @@
+CASE NARRATIVE
+{{narrative}}
+
+QUESTION
+{{question}}
+
+ALLOWED SUSPECTS
+{{suspects_json}}
+
+TASK
+Select the single most likely responsible suspect from ALLOWED SUSPECTS. 
+Base the decision only on the CASE NARRATIVE. 
+Report confidence as an integer from 0 to 100.
+
+REQUIRED JSON SCHEMA
+{
+  "suspect": "exact name copied from ALLOWED SUSPECTS",
+  "confidence": 0,
+  "supporting_evidence": "one concise sentence",
+  "contradictory_evidence": "one concise sentence",
+  "explanation": "one concise sentence"
+}
+
+Return only the JSON object. Do not add Markdown or explanatory text outside it.

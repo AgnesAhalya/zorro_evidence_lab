@@ -1,0 +1,1 @@
+Reconsider your previous answer carefully against the original case narrative. Check both supporting and contradictory evidence for every candidate. Do not assume your previous answer was correct or incorrect. Do not introduce new facts and do not infer any hidden ground truth. Return the same JSON schema as before.

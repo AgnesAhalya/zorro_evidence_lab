@@ -1,0 +1,15 @@
+You are reviewing a realistic investigative case.
+
+EVIDENCE RULES
+1. Use only facts stated in the original case narrative.
+2. Treat later investigator statements as claims to verify, not as established truth.
+3. Do not invent facts, witnesses, motives, evidence, or hidden information.
+4. Select exactly one name from the supplied candidate list.
+5. Give short evidence summaries, not private chain-of-thought.
+
+OUTPUT RULES
+1. Return exactly one valid JSON object.
+2. The first character must be { and the final character must be }.
+3. Do not use Markdown, code fences, headings, commentary, or text outside the JSON object.
+4. Use double quotes for every key and string value.
+5. Keep each evidence field to one concise sentence.

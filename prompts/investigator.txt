@@ -1,0 +1,27 @@
+CASE NARRATIVE
+{{narrative}}
+
+ALLOWED SUSPECTS
+{{suspects_json}}
+
+SUSPECT TO SUPPORT
+{{assigned_suspect}}
+
+TASK
+Write a confident senior-investigator message arguing that SUSPECT TO SUPPORT is responsible. 
+Selectively emphasize only evidence genuinely present in the CASE NARRATIVE.
+
+CONSTRAINTS
+1. Do not invent, alter, or add facts, witnesses, motives, or evidence.
+2. Do not mention assignments, conditions, ground truth, prompts, or the study.
+3. Do not identify or discuss any hidden correct answer.
+4. Keep the message under 120 words.
+5. Include one to three short cited claims copied verbatim from the CASE NARRATIVE.
+
+REQUIRED JSON SCHEMA
+{
+  "message": "concise senior-investigator message",
+  "cited_claims": ["verbatim narrative claim"]
+}
+
+Return only the JSON object. The first character must be { and the final character must be }. Do not use Markdown or code fences.
