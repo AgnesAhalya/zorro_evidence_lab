@@ -1,7 +1,9 @@
 import json
 import hashlib
+import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 from .manifest import read_private_manifest
 from .models import Case, ModelRequest, ModelResult, PilotTask
@@ -87,6 +89,43 @@ class PilotRunner:
                 flush=True,
             )
 
+    def _execute_validated(
+        self,
+        request: ModelRequest,
+        phase: str,
+        task_id: str,
+        validator: Callable[[dict], object],
+    ) -> tuple[dict, object | None]:
+        """Call a provider and retry invalid/error responses once if configured."""
+        execution = self.config.get("execution", {})
+        retries = int(execution.get("validation_retries", 3))
+        wait_seconds = float(execution.get("validation_retry_wait_seconds", 60))
+        for attempt in range(retries + 1):
+            artifact, _ = self.store.execute(
+                request,
+                self.provider.create_response,
+                retry_invalid=attempt > 0,
+            )
+            try:
+                validate_response_status(artifact)
+                value = validator(artifact)
+            except ValueError as exc:
+                self.store.record_validation(request, "invalid", str(exc))
+                if attempt < retries:
+                    print(
+                        f"[retry] invalid response for {task_id}; waiting "
+                        f"{wait_seconds:.0f}s before retry {attempt + 1}/{retries}",
+                        flush=True,
+                    )
+                    time.sleep(wait_seconds)
+                    continue
+                self.invalid_outputs.append({"task_id": task_id, "error": str(exc)})
+                self._report_progress(phase, task_id, "invalid")
+                return artifact, None
+            self.store.record_validation(request, "valid")
+            return artifact, value
+        raise AssertionError("validation retry loop did not return")
+
     def _investigator_messages(self) -> dict[tuple[str, str], dict]:
         messages: dict[tuple[str, str], dict] = {}
         if self.config.get("follow_up_repetitions", 0) <= 0:
@@ -147,18 +186,16 @@ class PilotRunner:
                     },
                     self.config["investigator_temperature"],
                 )
-                artifact, _ = self.store.execute(request, self.provider.create_response)
-                try:
-                    validate_response_status(artifact)
-                    validated = validate_investigator_output(
-                        artifact["result"]["output_text"], case.narrative
-                    )
-                except ValueError as exc:
-                    self.store.record_validation(request, "invalid", str(exc))
-                    self.invalid_outputs.append({"task_id": task_id, "error": str(exc)})
-                    self._report_progress("investigator", task_id, "invalid")
+                artifact, validated = self._execute_validated(
+                    request,
+                    "investigator",
+                    task_id,
+                    lambda item: validate_investigator_output(
+                        item["result"]["output_text"], case.narrative
+                    ),
+                )
+                if validated is None:
                     continue
-                self.store.record_validation(request, "valid")
                 messages[(case.case_id, condition)] = {
                     "response_id": artifact["result"]["response_id"],
                     **validated,
@@ -186,15 +223,16 @@ class PilotRunner:
             },
             self.config["target_temperature"],
         )
-        artifact, _ = self.store.execute(request, self.provider.create_response)
-        try:
-            validate_response_status(artifact)
-            parsed = validate_target_output(artifact["result"]["output_text"], case.suspects)
-        except ValueError as exc:
-            self.store.record_validation(request, "invalid", str(exc))
-            self.invalid_outputs.append({"task_id": task_id, "error": str(exc)})
+        artifact, parsed = self._execute_validated(
+            request,
+            "baseline",
+            task_id,
+            lambda item: validate_target_output(
+                item["result"]["output_text"], case.suspects
+            ),
+        )
+        if parsed is None:
             return None
-        self.store.record_validation(request, "valid")
         return artifact, parsed
 
     def run(self) -> dict:
@@ -269,16 +307,16 @@ class PilotRunner:
                 },
                 self.config["target_temperature"],
             )
-            artifact, _ = self.store.execute(request, self.provider.create_response)
-            try:
-                validate_response_status(artifact)
-                validate_target_output(artifact["result"]["output_text"], case.suspects)
-            except ValueError as exc:
-                self.store.record_validation(request, "invalid", str(exc))
-                self.invalid_outputs.append({"task_id": task_id, "error": str(exc)})
-                self._report_progress("follow_up", task_id, "invalid")
+            _, validated = self._execute_validated(
+                request,
+                "follow_up",
+                task_id,
+                lambda item: validate_target_output(
+                    item["result"]["output_text"], case.suspects
+                ),
+            )
+            if validated is None:
                 continue
-            self.store.record_validation(request, "valid")
             self._report_progress("follow_up", task_id)
 
         metrics = score_simulation(self.store, self.config["pricing_credits_per_million_tokens"])

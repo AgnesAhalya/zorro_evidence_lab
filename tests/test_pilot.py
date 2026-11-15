@@ -254,6 +254,42 @@ class PilotSetupTests(unittest.TestCase):
             self.assertEqual(artifact["result"]["output_text"], "")
             self.assertEqual(artifact["result"]["raw"]["error"]["type"], "TimeoutError")
 
+    def test_empty_provider_content_is_exported_as_empty_response_text(self) -> None:
+        request = ModelRequest(
+            model="openai/gpt-oss-20b",
+            instructions="Return JSON only.",
+            input=(),
+            max_output_tokens=6000,
+            temperature=0,
+            metadata={
+                "task_id": "investigator:musr:murder:012:negative_pressure",
+                "task_type": "investigator",
+                "case_id": "musr:murder:012",
+                "model": "openai/gpt-oss-20b",
+                "condition": "negative_pressure",
+            },
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            store = ArtifactStore(temporary)
+            artifact, cached = store.execute(
+                request,
+                lambda _: ModelResult(
+                    response_id="empty_content",
+                    output_text=None,
+                    model=request.model,
+                    input_tokens=1,
+                    output_tokens=0,
+                    latency_ms=1,
+                    raw={"choices": [{"message": {"content": None}}]},
+                ),
+            )
+            self.assertFalse(cached)
+            self.assertEqual(artifact["result"]["output_text"], "")
+            self.assertEqual(
+                (Path(temporary) / "analysis_text" / "musr__murder__012" / "openai_gpt-oss-20b" / "investigator_negative_pressure" / "response.txt").read_text(),
+                "",
+            )
+
     def test_openrouter_model_id_does_not_create_nested_artifact_folder(self) -> None:
         request = ModelRequest(
             model="z-ai/glm-5.3-flash",

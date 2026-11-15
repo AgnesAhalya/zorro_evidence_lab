@@ -74,7 +74,7 @@ class ArtifactStore:
         }
         request_payload = artifact.get("provider_request", request.provider_payload())
         result = artifact.get("result", {})
-        response_text = result.get("output_text", "")
+        response_text = result.get("output_text") or ""
         raw_response = result.get("raw", {})
 
         self._write_text_atomic(
@@ -95,16 +95,23 @@ class ArtifactStore:
         self,
         request: ModelRequest,
         call: Callable[[ModelRequest], ModelResult],
+        retry_invalid: bool = False,
     ) -> tuple[dict, bool]:
         path = self.path_for(request)
         expected_hash = self.request_hash(request)
         if path.exists():
             artifact = json.loads(path.read_text(encoding="utf-8"))
             if artifact["request_hash"] == expected_hash:
-                self.cache_hits += 1
-                self._write_text_bundle(request, artifact)
-                return artifact, True
-            raise RuntimeError(f"Request changed for existing artifact: {path}")
+                invalid_cached = (
+                    artifact.get("status") == "error"
+                    or artifact.get("validation", {}).get("status") == "invalid"
+                )
+                if not (retry_invalid and invalid_cached):
+                    self.cache_hits += 1
+                    self._write_text_bundle(request, artifact)
+                    return artifact, True
+            else:
+                raise RuntimeError(f"Request changed for existing artifact: {path}")
 
         started = datetime.now(timezone.utc)
         try:
@@ -126,6 +133,8 @@ class ArtifactStore:
                 },
             )
         provider_status = result.raw.get("status", "completed")
+        result_data = asdict(result)
+        result_data["output_text"] = result_data.get("output_text") or ""
         artifact = {
             "created_at": datetime.now(timezone.utc).isoformat(),
             "status": provider_status,
@@ -136,7 +145,7 @@ class ArtifactStore:
             "task_type": request.metadata["task_type"],
             "controller_metadata": request.metadata,
             "provider_request": request.provider_payload(),
-            "result": asdict(result),
+            "result": result_data,
         }
         self._write_atomic(path, artifact)
         self._write_text_bundle(request, artifact)
@@ -154,6 +163,8 @@ class ArtifactStore:
                 return artifact, True
             raise RuntimeError(f"Request changed for existing artifact: {path}")
 
+        result_data = asdict(result)
+        result_data["output_text"] = result_data.get("output_text") or ""
         artifact = {
             "created_at": datetime.now(timezone.utc).isoformat(),
             "status": result.raw.get("status", "completed"),
@@ -164,7 +175,7 @@ class ArtifactStore:
             "task_type": request.metadata["task_type"],
             "controller_metadata": request.metadata,
             "provider_request": request.provider_payload(),
-            "result": asdict(result),
+            "result": result_data,
         }
         self._write_atomic(path, artifact)
         self._write_text_bundle(request, artifact)

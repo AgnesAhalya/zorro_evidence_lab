@@ -267,10 +267,13 @@ class OpenRouterProvider:
                     time.sleep(delay)
 
         choice = raw["choices"][0]
-        message = choice["message"].get("content", "")
+        # Some OpenRouter providers return content=null for an empty/refusal
+        # response. Preserve the raw response, but keep the normalized result
+        # text-safe so artifact persistence and validation can handle it.
+        message = choice["message"].get("content") or ""
         if isinstance(message, list):
             message = "".join(
-                item.get("text", "") for item in message if isinstance(item, dict)
+                str(item.get("text") or "") for item in message if isinstance(item, dict)
             )
         usage = raw.get("usage") or {}
         return ModelResult(
