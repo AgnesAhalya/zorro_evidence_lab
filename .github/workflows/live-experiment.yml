@@ -26,7 +26,8 @@ jobs:
     name: Run ${{ inputs.scope }} experiment
     if: ${{ inputs.allow_paid_calls == true && inputs.scope != 'pilot-openrouter' && inputs.scope != 'main-openrouter' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 1440
+    # GitHub-hosted runners have a hard six-hour job limit.
+    timeout-minutes: 360
     environment: ${{ inputs.scope }}
     env:
       ADAPTION_API_KEY: ${{ secrets.ADAPTION_API_KEY }}
@@ -87,7 +88,8 @@ jobs:
     name: Run ${{ inputs.scope }} shard ${{ matrix.shard_index }}
     if: ${{ inputs.allow_paid_calls == true && (inputs.scope == 'pilot-openrouter' || inputs.scope == 'main-openrouter') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 1440
+    # GitHub-hosted runners have a hard six-hour job limit.
+    timeout-minutes: 360
     environment: ${{ inputs.scope }}
     strategy:
       fail-fast: false
