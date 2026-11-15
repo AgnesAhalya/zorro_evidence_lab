@@ -53,7 +53,7 @@ jobs:
             config="config/pilot-openrouter.json"
             public_manifest="pilot/manifest.github.pilot-openrouter.public.json"
             private_manifest="pilot/manifest.github.pilot-openrouter.private.json"
-            artifacts="pilot/artifacts/openrouter/github-pilot-openrouter"
+            artifacts="pilot/artifacts/openrouter/github-pilot-openrouter-v3"
           elif [[ "${{ inputs.scope }}" == "main" ]]; then
             config="config/main.json"
             public_manifest="pilot/manifest.github.main.public.json"
@@ -63,7 +63,7 @@ jobs:
             config="config/main-openrouter.json"
             public_manifest="pilot/manifest.github.main-openrouter.public.json"
             private_manifest="pilot/manifest.github.main-openrouter.private.json"
-            artifacts="pilot/artifacts/adaption/github-main-openrouter"
+            artifacts="pilot/artifacts/openrouter/github-main-openrouter-v3"
           fi
           python -m crimino_flipper.cli --config "$config" show-plan
           python -m crimino_flipper.cli --config "$config" build-manifest \

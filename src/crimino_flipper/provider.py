@@ -218,6 +218,11 @@ class OpenRouterProvider:
             "temperature": request.temperature,
             "max_tokens": request.max_output_tokens,
         }
+        # Keep the experiment's model assignment unchanged, but ask
+        # OpenRouter-compatible models to return a JSON object. Validation
+        # below still enforces the task-specific fields and suspect names.
+        if request.metadata.get("task_type") in {"investigator", "target"}:
+            payload["response_format"] = {"type": "json_object"}
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",

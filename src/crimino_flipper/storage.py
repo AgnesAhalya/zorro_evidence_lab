@@ -26,7 +26,10 @@ class ArtifactStore:
         return hashlib.sha256(encoded).hexdigest()
 
     def path_for(self, request: ModelRequest) -> Path:
-        task_id = request.metadata["task_id"].replace(":", "__")
+        # Model IDs from OpenRouter contain '/'. Keep the complete task ID in
+        # metadata, but never let provider-controlled IDs create subfolders;
+        # artifact discovery intentionally scans the task-type directory.
+        task_id = self._safe_component(request.metadata["task_id"])
         return self.root / request.metadata["task_type"] / f"{task_id}.json"
 
     @staticmethod

@@ -254,6 +254,41 @@ class PilotSetupTests(unittest.TestCase):
             self.assertEqual(artifact["result"]["output_text"], "")
             self.assertEqual(artifact["result"]["raw"]["error"]["type"], "TimeoutError")
 
+    def test_openrouter_model_id_does_not_create_nested_artifact_folder(self) -> None:
+        request = ModelRequest(
+            model="z-ai/glm-5.3-flash",
+            instructions="Return JSON only.",
+            input=(),
+            max_output_tokens=6000,
+            temperature=0,
+            metadata={
+                "task_id": "target:musr:murder:012:z-ai/glm-5.3-flash:baseline",
+                "task_type": "target",
+                "case_id": "musr:murder:012",
+                "model": "z-ai/glm-5.3-flash",
+                "condition": "baseline",
+                "repetition": 0,
+            },
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            store = ArtifactStore(temporary)
+            artifact, cached = store.execute(
+                request,
+                lambda _: ModelResult(
+                    response_id="openrouter_test",
+                    output_text="{}",
+                    model=request.model,
+                    input_tokens=1,
+                    output_tokens=1,
+                    latency_ms=1,
+                    raw={},
+                ),
+            )
+            self.assertFalse(cached)
+            self.assertEqual(len(store.artifacts("target")), 1)
+            self.assertEqual(artifact["controller_metadata"]["model"], request.model)
+            self.assertFalse(any(path.is_dir() for path in (Path(temporary) / "target").iterdir()))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,7 +29,7 @@ The 10-case local pilot is configured in `config/pilot.json`. GitLab validation 
 
 GitHub Actions provides the same flow through `.github/workflows/ci.yml`. Its live workflow is manual only: dispatch `.github/workflows/live-experiment.yml`, choose an experiment scope, and set `allow_paid_calls` to `true`. The Adaption scopes require the protected `ADAPTION_API_KEY` GitHub secret; the OpenRouter scopes require the protected `OPENROUTER_API_KEY` secret.
 
-The `open-router` branch also provides `pilot-openrouter` (10 cases) and `main-openrouter` (550 cases), both using three models: `deepseek/deepseek-v4-flash` and `z-ai/glm-5.3-flash` as target models, plus `deepseek/deepseek-v4.1-flash-1017` as investigator. Set the protected `OPENROUTER_API_KEY` secret and select the desired OpenRouter scope in the live workflow.
+The `open-router` branch also provides `pilot-openrouter` (10 cases) and `main-openrouter` (550 cases), both using three models: `qwen/qwen3.7-flash` and `z-ai/glm-5.3-flash` as target models, plus `openai/gpt-oss-20b` as investigator. Set the protected `OPENROUTER_API_KEY` secret and select the desired OpenRouter scope in the live workflow.
 
 ## Docker and GitLab
 

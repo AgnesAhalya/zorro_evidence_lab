@@ -1,5 +1,5 @@
 {
-  "run_id": "main-openrouter-deepseek-v1",
+  "run_id": "main-openrouter-qwen-v1",
   "stage": "main-openrouter",
   "case_count": 550,
   "distinct_musr_groups": false,
@@ -13,10 +13,10 @@
     "Complex": 100
   },
   "target_models": [
-    "deepseek/deepseek-v4-flash",
+    "qwen/qwen3.7-flash",
     "z-ai/glm-5.3-flash"
   ],
-  "investigator_model": "deepseek/deepseek-v4.1-flash-1017",
+  "investigator_model": "openai/gpt-oss-20b",
   "follow_up_repetitions": 1,
   "conditions": [
     "negative_pressure",
@@ -29,17 +29,17 @@
   "investigator_temperature": 0,
   "max_output_tokens": 6000,
   "pricing_credits_per_million_tokens": {
-    "deepseek/deepseek-v4-flash": {
-      "input": 0.0679,
-      "output": 0.168
+    "qwen/qwen3.7-flash": {
+      "input": 0.03,
+      "output": 0.13
     },
     "z-ai/glm-5.3-flash": {
       "input": 0.0399,
       "output": 0.0784
     },
-    "deepseek/deepseek-v4.1-flash-1017": {
-      "input": 0.038,
-      "output": 0.50
+    "openai/gpt-oss-20b": {
+      "input": 0.018,
+      "output": 0.09
     }
   },
   "execution": {
