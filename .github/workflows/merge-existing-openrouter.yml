@@ -58,6 +58,9 @@ jobs:
             --config "$config" \
             --summary-root existing-shards \
             --output-dir merged-results
+          test -s merged-results/run_summary.json
+          test -s merged-results/results_summary.md
+          test -s merged-results/case_analysis.csv
       - name: Upload merged report
         uses: actions/upload-artifact@v4
         with:

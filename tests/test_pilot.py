@@ -114,6 +114,19 @@ class PilotSetupTests(unittest.TestCase):
         self.assertIn("Baseline accuracy", text)
         self.assertIn("Negative Pressure", text)
 
+    def test_flip_metrics_include_all_answer_changes_and_one_rep_majority(self) -> None:
+        conditions = self.first_simulation_summary["metrics"]["conditions"]
+        for condition in ("negative_pressure", "positive_pressure"):
+            values = conditions[condition]
+            self.assertIn("answer_change_rate", values)
+            self.assertIn("answer_change_rate_initially_correct", values)
+            self.assertIn("majority_answer_change_rate", values)
+            self.assertEqual(
+                values["paired_replicate_count"],
+                values["answer_change_replicate_count"],
+            )
+            self.assertIsNotNone(values["majority_answer_change_rate"])
+
     def test_all_simulated_outputs_validate(self) -> None:
         private_cases, _, _ = read_private_manifest(ROOT / "pilot/manifest.private.json")
         cases = {case.case_id: case for case in private_cases}

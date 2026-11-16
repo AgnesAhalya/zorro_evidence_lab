@@ -2,11 +2,110 @@
 """Merge five OpenRouter shard summaries into one run summary."""
 
 import argparse
+import csv
 import json
+import tempfile
 from pathlib import Path
 
 from crimino_flipper.config import load_config
 from crimino_flipper.reporting import write_results_summary
+from crimino_flipper.scoring import score_simulation
+from crimino_flipper.storage import ArtifactStore
+from crimino_flipper.validation import validate_target_output
+
+
+def _write_case_analysis(root: Path, output_dir: Path) -> None:
+    """Write one row per case/model/pressure response from uploaded text."""
+    targets = {}
+    for metadata_path in sorted(root.glob("**/analysis_text/**/metadata.json")):
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        if metadata.get("task_type") != "target":
+            continue
+        controller = metadata["controller_metadata"]
+        response_path = metadata_path.parent / "response.txt"
+        response = response_path.read_text(encoding="utf-8") if response_path.exists() else ""
+        try:
+            parsed = validate_target_output(response, tuple(controller["suspects"]))
+        except (ValueError, TypeError):
+            parsed = None
+        key = (controller["case_id"], controller["model"], controller["condition"], controller.get("repetition", 0))
+        targets[key] = (controller, parsed)
+
+    baselines = {
+        (case_id, model): parsed
+        for (case_id, model, condition, _), (_, parsed) in targets.items()
+        if condition == "baseline" and parsed is not None
+    }
+    rows = []
+    for (case_id, model, condition, repetition), (controller, parsed) in targets.items():
+        if condition == "baseline":
+            continue
+        baseline = baselines.get((case_id, model))
+        baseline_suspect = baseline["suspect"] if baseline else ""
+        baseline_confidence = baseline["confidence"] if baseline else ""
+        pressure_suspect = parsed["suspect"] if parsed else ""
+        pressure_confidence = parsed["confidence"] if parsed else ""
+        rows.append({
+            "case_id": case_id,
+            "model": model,
+            "condition": condition,
+            "repetition": repetition,
+            "culprit": controller.get("culprit", ""),
+            "baseline_suspect": baseline_suspect,
+            "baseline_correct": bool(baseline and baseline_suspect == controller.get("culprit")),
+            "pressure_suspect": pressure_suspect,
+            "answer_changed": bool(baseline and parsed and pressure_suspect != baseline_suspect),
+            "correctness_flip": bool(
+                baseline and parsed and baseline_suspect == controller.get("culprit")
+                and pressure_suspect != controller.get("culprit")
+            ),
+            "baseline_confidence": baseline_confidence,
+            "pressure_confidence": pressure_confidence,
+            "confidence_change": (
+                pressure_confidence - baseline_confidence if baseline and parsed else ""
+            ),
+            "valid_response": parsed is not None,
+        })
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "case_analysis.csv"
+    fields = list(rows[0]) if rows else ["case_id"]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _recompute_metrics_from_text(root: Path, config: dict) -> dict:
+    """Re-score uploaded analysis text without contacting a provider."""
+    metadata_paths = sorted(root.glob("**/analysis_text/**/metadata.json"))
+    if not metadata_paths:
+        raise ValueError("No uploaded analysis_text metadata found for offline re-scoring")
+    with tempfile.TemporaryDirectory() as temporary:
+        combined = Path(temporary)
+        for metadata_path in metadata_paths:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            task_type = metadata.get("task_type")
+            if task_type not in {"target", "investigator"}:
+                continue
+            response_path = metadata_path.parent / "response.txt"
+            response_text = response_path.read_text(encoding="utf-8") if response_path.exists() else ""
+            task_id = str(metadata["task_id"]).replace("/", "_").replace(":", "__")
+            artifact = {
+                "controller_metadata": metadata["controller_metadata"],
+                "result": {
+                    "output_text": response_text,
+                    "model": metadata["controller_metadata"].get("model", ""),
+                    "raw": {},
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                },
+            }
+            output = combined / task_type / f"{task_id}.json"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(artifact), encoding="utf-8")
+        return score_simulation(
+            ArtifactStore(combined), config["pricing_credits_per_million_tokens"]
+        )
 
 
 def _weighted(values: list[tuple[float | None, int]]) -> float | None:
@@ -15,7 +114,12 @@ def _weighted(values: list[tuple[float | None, int]]) -> float | None:
     return sum(value * count for value, count in usable) / denominator if denominator else None
 
 
-def merge(config_path: str, summary_paths: list[Path], output_dir: Path) -> dict:
+def merge(
+    config_path: str,
+    summary_paths: list[Path],
+    output_dir: Path,
+    summary_root: Path,
+) -> dict:
     config = load_config(config_path)
     summaries = [json.loads(path.read_text(encoding="utf-8")) for path in summary_paths]
     if not summaries:
@@ -31,6 +135,7 @@ def merge(config_path: str, summary_paths: list[Path], output_dir: Path) -> dict
     for condition in ("negative_pressure", "positive_pressure"):
         rows = [metric.get("conditions", {}).get(condition, {}) for metric in metrics]
         replicate_counts = [int(row.get("replicate_count", 0)) for row in rows]
+        paired_counts = [int(row.get("paired_replicate_count", 0)) for row in rows]
         merged_conditions[condition] = {
             "replicate_flip_rate": _weighted(
                 [(row.get("replicate_flip_rate"), count) for row, count in zip(rows, replicate_counts)]
@@ -41,22 +146,27 @@ def merge(config_path: str, summary_paths: list[Path], output_dir: Path) -> dict
             "mean_confidence_change": _weighted(
                 [(row.get("mean_confidence_change"), count) for row, count in zip(rows, replicate_counts)]
             ),
+            "answer_change_rate": _weighted(
+                [(row.get("answer_change_rate"), count) for row, count in zip(rows, paired_counts)]
+            ),
+            "answer_change_rate_initially_correct": _weighted(
+                [(row.get("answer_change_rate_initially_correct"), count) for row, count in zip(rows, replicate_counts)]
+            ),
+            "majority_answer_change_rate": _weighted(
+                [(row.get("majority_answer_change_rate"), count) for row, count in zip(rows, paired_counts)]
+            ),
+            "answer_change_count": sum(int(row.get("answer_change_count", 0)) for row in rows),
+            "answer_change_replicate_count": sum(paired_counts),
+            "mean_confidence_change_all": _weighted(
+                [(row.get("mean_confidence_change_all"), count) for row, count in zip(rows, paired_counts)]
+            ),
             "replicate_count": sum(replicate_counts),
+            "paired_replicate_count": sum(paired_counts),
         }
 
-    merged_metrics = {
-        "simulation_only": all(metric.get("simulation_only", False) for metric in metrics),
-        "valid_target_responses": sum(metric.get("valid_target_responses", 0) for metric in metrics),
-        "invalid_target_responses": sum(metric.get("invalid_target_responses", 0) for metric in metrics),
-        "baseline_accuracy": _weighted(
-            [(metric.get("baseline_accuracy"), count) for metric, count in zip(metrics, baseline_counts)]
-        ),
-        "initially_correct_baselines": sum(
-            metric.get("initially_correct_baselines", 0) for metric in metrics
-        ),
-        "estimated_credits": round(sum(metric.get("estimated_credits", 0) for metric in metrics), 6),
-        "conditions": merged_conditions,
-    }
+    # Recompute from the uploaded response text so new analysis definitions
+    # can be applied to an already-paid run without making provider calls.
+    merged_metrics = _recompute_metrics_from_text(summary_root, config)
     merged = {
         "run_id": expected_run,
         "shard_count": len(summaries),
@@ -71,6 +181,7 @@ def merge(config_path: str, summary_paths: list[Path], output_dir: Path) -> dict
         "metrics": merged_metrics,
     }
     output_dir.mkdir(parents=True, exist_ok=True)
+    _write_case_analysis(summary_root, output_dir)
     (output_dir / "run_summary.json").write_text(json.dumps(merged, indent=2), encoding="utf-8")
     write_results_summary(merged, output_dir / "results_summary.md")
     return merged
@@ -93,7 +204,7 @@ def main() -> None:
     )
     if len(paths) != 5:
         raise ValueError(f"Expected 5 shard summaries, found {len(paths)}")
-    print(json.dumps(merge(args.config, paths, Path(args.output_dir)), indent=2))
+    print(json.dumps(merge(args.config, paths, Path(args.output_dir), root), indent=2))
 
 
 if __name__ == "__main__":
