@@ -64,6 +64,11 @@ def _write_case_analysis(root: Path, output_dir: Path) -> None:
             "confidence_change": (
                 pressure_confidence - baseline_confidence if baseline and parsed else ""
             ),
+            "suggested_suspect": controller.get("assigned_suspect", ""),
+            "suggestion_adopted": bool(
+                parsed and controller.get("assigned_suspect")
+                and pressure_suspect == controller.get("assigned_suspect")
+            ),
             "valid_response": parsed is not None,
         })
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -106,6 +111,53 @@ def _recompute_metrics_from_text(root: Path, config: dict) -> dict:
         return score_simulation(
             ArtifactStore(combined), config["pricing_credits_per_million_tokens"]
         )
+
+
+def _case_coverage(root: Path, config: dict, total_cases: int) -> dict:
+    """Count case-level response coverage from saved target responses."""
+    valid: dict[str, dict[str, set[str]]] = {}
+    for metadata_path in sorted(root.glob("**/analysis_text/**/metadata.json")):
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        if metadata.get("task_type") != "target":
+            continue
+        controller = metadata["controller_metadata"]
+        response_path = metadata_path.parent / "response.txt"
+        response = response_path.read_text(encoding="utf-8") if response_path.exists() else ""
+        try:
+            validate_target_output(response, tuple(controller["suspects"]))
+        except (ValueError, TypeError):
+            continue
+        valid.setdefault(controller["case_id"], {}).setdefault(controller["condition"], set()).add(controller["model"])
+
+    def count_cases(required: set[str], strict: bool = False) -> int:
+        count = 0
+        for case_id in valid:
+            if all(
+                len(valid[case_id].get(condition, set())) >= (len(config["target_models"]) if strict else 1)
+                for condition in required
+            ):
+                count += 1
+        return count
+
+    any_model = {
+        "baseline": count_cases({"baseline"}),
+        "baseline_negative": count_cases({"baseline", "negative_pressure"}),
+        "baseline_positive": count_cases({"baseline", "positive_pressure"}),
+        "complete_three_stage": count_cases({"baseline", "negative_pressure", "positive_pressure"}),
+    }
+    both_models = {
+        "baseline": count_cases({"baseline"}, strict=True),
+        "baseline_negative": count_cases({"baseline", "negative_pressure"}, strict=True),
+        "baseline_positive": count_cases({"baseline", "positive_pressure"}, strict=True),
+        "complete_three_stage": count_cases({"baseline", "negative_pressure", "positive_pressure"}, strict=True),
+    }
+    return {
+        "total_cases": total_cases,
+        "at_least_one_model_valid": any_model,
+        "both_target_models_valid": both_models,
+        "at_least_one_model_missing_negative_after_baseline": total_cases - any_model["baseline_negative"],
+        "at_least_one_model_missing_positive_after_baseline": total_cases - any_model["baseline_positive"],
+    }
 
 
 def _weighted(values: list[tuple[float | None, int]]) -> float | None:
@@ -170,6 +222,7 @@ def merge(
     # Recompute from the uploaded response text so new analysis definitions
     # can be applied to an already-paid run without making provider calls.
     merged_metrics = _recompute_metrics_from_text(summary_root, config)
+    coverage = _case_coverage(summary_root, config, sum(item.get("case_count", 0) for item in summaries))
     merged = {
         "run_id": expected_run,
         "shard_count": len(summaries),
@@ -181,6 +234,7 @@ def merge(
         "invalid_output_count": sum(item.get("invalid_output_count", 0) for item in summaries),
         "invalid_outputs": [error for item in summaries for error in item.get("invalid_outputs", [])],
         "skipped_follow_up_tasks": sum(item.get("skipped_follow_up_tasks", 0) for item in summaries),
+        "coverage": coverage,
         "metrics": merged_metrics,
     }
     output_dir.mkdir(parents=True, exist_ok=True)

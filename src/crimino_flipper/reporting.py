@@ -36,8 +36,26 @@ def build_results_summary(data: dict) -> str:
             f"{_percent(values.get('majority_case_flip_rate'))} | "
             f"{_percent(values.get('answer_change_rate'))} |"
         )
+    epistemic_balance = metrics.get("epistemic_balance", {})
     lines.extend(
         [
+            "",
+            "## EpistemicBalance",
+            "",
+            "| Measure | Negative pressure | Positive pressure | Positive − negative |",
+            "|---|---:|---:|---:|",
+            f"| Suggestion adoption rate | {_percent(epistemic_balance.get('negative_suggestion_adoption_rate'))} | "
+            f"{_percent(epistemic_balance.get('positive_suggestion_adoption_rate'))} | "
+            f"{_percent(epistemic_balance.get('suggestion_adoption_rate_difference_positive_minus_negative'))} |",
+            f"| Directional accuracy transition | {_percent(epistemic_balance.get('negative_harmful_transition_rate'))} harmful | "
+            f"{_percent(epistemic_balance.get('positive_corrective_transition_rate'))} corrective | "
+            f"{_percent(epistemic_balance.get('corrective_minus_harmful_transition_rate'))} |",
+            f"| Mean confidence change | {conditions.get('negative_pressure', {}).get('mean_confidence_change_all', '—')} points | "
+            f"{conditions.get('positive_pressure', {}).get('mean_confidence_change_all', '—')} points | "
+            f"{epistemic_balance.get('confidence_change_difference_positive_minus_negative', '—')} points |",
+            "",
+            "EpistemicBalance measures responsiveness to the directional investigator suggestion. "
+            "Adopting the correct positive-pressure suggestion is not, by itself, evidence of independent evidence-based reasoning.",
             "",
             "## Accuracy transitions",
             "",
@@ -55,6 +73,27 @@ def build_results_summary(data: dict) -> str:
             f"{values.get('incorrect_to_correct_count', 0)}/{values.get('incorrect_to_correct_total', 0)} | "
             f"{values.get('mean_confidence_change_all', '—')} points |"
         )
+    coverage = data.get("coverage", {})
+    any_model = coverage.get("at_least_one_model_valid", {})
+    both_models = coverage.get("both_target_models_valid", {})
+    lines.extend(
+        [
+            "",
+            "## Case coverage",
+            "",
+            "| Stage | At least one model valid | Both target models valid |",
+            "|---|---:|---:|",
+            f"| Total cases | {coverage.get('total_cases', '—')} | {coverage.get('total_cases', '—')} |",
+            f"| Baseline | {any_model.get('baseline', '—')} | {both_models.get('baseline', '—')} |",
+            f"| Baseline + negative pressure | {any_model.get('baseline_negative', '—')} | {both_models.get('baseline_negative', '—')} |",
+            f"| Baseline + positive pressure | {any_model.get('baseline_positive', '—')} | {both_models.get('baseline_positive', '—')} |",
+            f"| Baseline + negative + positive | {any_model.get('complete_three_stage', '—')} | {both_models.get('complete_three_stage', '—')} |",
+            f"| Missing negative after baseline | {coverage.get('at_least_one_model_missing_negative_after_baseline', '—')} | — |",
+            f"| Missing positive after baseline | {coverage.get('at_least_one_model_missing_positive_after_baseline', '—')} | — |",
+            "",
+            "Coverage counts are case-level. The first column counts a case when at least one target model has a valid response; the second requires valid responses from both target models.",
+        ]
+    )
     lines.extend(
         [
             "",

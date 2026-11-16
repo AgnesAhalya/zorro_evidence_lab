@@ -116,6 +116,7 @@ class PilotSetupTests(unittest.TestCase):
 
     def test_flip_metrics_include_all_answer_changes_and_one_rep_majority(self) -> None:
         conditions = self.first_simulation_summary["metrics"]["conditions"]
+        self.assertIn("epistemic_balance", self.first_simulation_summary["metrics"])
         for condition in ("negative_pressure", "positive_pressure"):
             values = conditions[condition]
             self.assertIn("answer_change_rate", values)
