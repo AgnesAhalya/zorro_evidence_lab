@@ -120,6 +120,11 @@ class PilotSetupTests(unittest.TestCase):
             values = conditions[condition]
             self.assertIn("answer_change_rate", values)
             self.assertIn("answer_change_rate_initially_correct", values)
+            self.assertIn("answer_change_count_initially_correct", values)
+            self.assertIn("initial_accuracy", values)
+            self.assertIn("post_pressure_accuracy", values)
+            self.assertIn("correct_to_incorrect_count", values)
+            self.assertIn("incorrect_to_correct_count", values)
             self.assertIn("majority_answer_change_rate", values)
             self.assertEqual(
                 values["paired_replicate_count"],

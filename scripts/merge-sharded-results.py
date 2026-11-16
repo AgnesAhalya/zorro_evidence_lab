@@ -156,6 +156,9 @@ def merge(
                 [(row.get("majority_answer_change_rate"), count) for row, count in zip(rows, paired_counts)]
             ),
             "answer_change_count": sum(int(row.get("answer_change_count", 0)) for row in rows),
+            "answer_change_count_initially_correct": sum(
+                int(row.get("answer_change_count_initially_correct", 0)) for row in rows
+            ),
             "answer_change_replicate_count": sum(paired_counts),
             "mean_confidence_change_all": _weighted(
                 [(row.get("mean_confidence_change_all"), count) for row, count in zip(rows, paired_counts)]
