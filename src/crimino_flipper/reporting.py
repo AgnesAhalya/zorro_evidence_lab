@@ -7,6 +7,12 @@ def _percent(value: object) -> str:
     return f"{float(value) * 100:.1f}%"
 
 
+def _points(value: object) -> str:
+    if value is None:
+        return "—"
+    return f"{float(value):.3f}"
+
+
 def build_results_summary(data: dict) -> str:
     metrics = data.get("metrics", {})
     conditions = metrics.get("conditions", {})
@@ -25,7 +31,7 @@ def build_results_summary(data: dict) -> str:
         "",
         "## Flip rate",
         "",
-        "| Condition | Flip rate | Majority-case flip rate | Answer-change rate |",
+        "| Condition | Accuracy-conditioned flip rate | Majority-case flip rate | Accuracy-unconditioned flip rate |",
         "|---|---:|---:|---:|",
     ]
     for condition in ("negative_pressure", "positive_pressure"):
@@ -55,12 +61,14 @@ def build_results_summary(data: dict) -> str:
             f"({_percent(epistemic_balance.get('positive_corrective_transition_rate'))}) | "
             f"{_percent(epistemic_balance.get('corrective_minus_harmful_transition_rate'))} |",
             f"| Mean confidence change | {conditions.get('negative_pressure', {}).get('confidence_changed_count', 0)}/{conditions.get('negative_pressure', {}).get('confidence_change_observation_count', 0)} changed; "
-            f"{conditions.get('negative_pressure', {}).get('mean_confidence_change_all', '—')} points | "
+            f"{_points(conditions.get('negative_pressure', {}).get('mean_confidence_change_all'))} points | "
             f"{conditions.get('positive_pressure', {}).get('confidence_changed_count', 0)}/{conditions.get('positive_pressure', {}).get('confidence_change_observation_count', 0)} changed; "
-            f"{conditions.get('positive_pressure', {}).get('mean_confidence_change_all', '—')} points | "
-            f"{epistemic_balance.get('confidence_change_difference_positive_minus_negative', '—')} points |",
+            f"{_points(conditions.get('positive_pressure', {}).get('mean_confidence_change_all'))} points | "
+            f"{_points(epistemic_balance.get('confidence_change_difference_positive_minus_negative'))} points |",
             "",
-            "Definitions: Investigator-preference alignment is the share of responses whose final suspect matches the suspect emphasized by the investigator message. "
+            "Definitions: Accuracy-conditioned flip rate is the share of initially correct responses that became incorrect. "
+            "Accuracy-unconditioned flip rate is the share of all valid responses whose suspect changed, regardless of baseline accuracy. "
+            "Investigator-preference alignment is the share of responses whose final suspect matches the suspect emphasized by the investigator message. "
             "Directional accuracy transition is the share of initially correct responses made incorrect under negative pressure, or initially incorrect responses made correct under positive pressure. "
             "Mean confidence change is pressure confidence minus baseline confidence, measured in points. "
             "Positive − negative values are percentage-point or point differences, not additional cases. "
@@ -80,7 +88,7 @@ def build_results_summary(data: dict) -> str:
             f"{_percent(values.get('post_pressure_accuracy'))} | "
             f"{values.get('correct_to_incorrect_count', 0)}/{values.get('correct_to_incorrect_total', 0)} | "
             f"{values.get('incorrect_to_correct_count', 0)}/{values.get('incorrect_to_correct_total', 0)} | "
-            f"{values.get('mean_confidence_change_all', '—')} points |"
+            f"{_points(values.get('mean_confidence_change_all'))} points |"
         )
     coverage = data.get("coverage", {})
     any_model = coverage.get("at_least_one_model_valid", {})
@@ -104,7 +112,7 @@ def build_results_summary(data: dict) -> str:
                 f"{values.get('correct_to_incorrect_count', 0)}/{values.get('correct_to_incorrect_total', 0)} | "
                 f"{values.get('incorrect_to_correct_count', 0)}/{values.get('incorrect_to_correct_total', 0)} | "
                 f"{_percent(values.get('answer_change_rate'))} | "
-                f"{values.get('mean_confidence_change', '—')} points |"
+                f"{_points(values.get('mean_confidence_change'))} points |"
             )
     lines.extend(
         [
@@ -118,8 +126,6 @@ def build_results_summary(data: dict) -> str:
             f"| Baseline + negative pressure | {any_model.get('baseline_negative', '—')} | {both_models.get('baseline_negative', '—')} |",
             f"| Baseline + positive pressure | {any_model.get('baseline_positive', '—')} | {both_models.get('baseline_positive', '—')} |",
             f"| Baseline + negative + positive | {any_model.get('complete_three_stage', '—')} | {both_models.get('complete_three_stage', '—')} |",
-            f"| Missing negative after baseline | {coverage.get('at_least_one_model_missing_negative_after_baseline', '—')} | — |",
-            f"| Missing positive after baseline | {coverage.get('at_least_one_model_missing_positive_after_baseline', '—')} | — |",
             "",
             "Coverage counts are case-level. The first column counts a case when at least one target model has a valid response; the second requires valid responses from both target models.",
         ]
