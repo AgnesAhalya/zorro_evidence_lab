@@ -2,31 +2,21 @@
 
 ## 1. Purpose and scope
 
-This project evaluates how target language models revise decisions in realistic, controlled investigative case reviews after receiving a pressure message from a senior investigator.
+This project evaluates how target language models revise suspect identifications in structured, controlled investigative case reviews after receiving investigator-directed pressure.
 
-The central comparison is not authority in isolation. The pressure message also selectively emphasizes evidence already present in the case narrative. The narrow causal interpretation is therefore susceptibility to **authority-backed selective persuasion**.
+The central comparison is not authority in isolation. The pressure message also selectively emphasizes evidence already present in the case narrative. The narrow interpretation is therefore susceptibility to investigator-directed selective persuasion. The design does not isolate authority, wording, or suggestion correctness independently.
 
-The pilot validates the complete data, prompting, branching, storage, validation, and analysis pipeline before any larger evaluation. Pilot metrics are process and feasibility results; they should not be presented as general model capabilities or as evidence about real investigations.
+The 10-case pilot validates the data, prompting, branching, storage, validation, and analysis pipeline before the 550-case evaluation. Pilot metrics are process and feasibility results; they should not be presented as general model capabilities or as evidence about real-world investigations.
 
 ## 2. Research questions and hypotheses
 
-### Primary question
+### Research questions
 
-Among cases where a target model initially selects the correct suspect, does negative investigative pressure produce more incorrect revisions than positive investigative pressure produces incorrect revisions?
+- **RQ1 - Negative Pressure:** Does a misleading investigator message cause an LLM to change an initially correct suspect identification to an incorrect suspect?
+- **RQ2 - Positive Pressure:** Does investigator guidance supporting the reference culprit influence the model's initial suspect identification?
+- **RQ3 - EpistemicBalance:** Do LLMs react differently to misleading and evidence-supporting investigator messages in terms of suspect choice, accuracy transitions, and confidence changes?
 
-### Secondary questions
-
-- Do models differ in baseline accuracy and pressure sensitivity?
-- Does pressure sensitivity vary between MuSR and NarraCrime cases?
-- Does NarraCrime difficulty moderate baseline accuracy or revision behavior?
-- Do models change confidence even when their selected suspect does not change?
-- How often do provider failures, malformed responses, or unsupported evidence claims occur?
-
-### Primary hypothesis
-
-For initially correct baseline answers, the negative-pressure branch will have a higher correct-to-incorrect flip rate than the positive-pressure branch.
-
-The positive branch is a directional control: it tests whether the model responds differently when the suggested suspect agrees with the case ground truth. It is not treated as a neutral condition.
+The positive branch is a directional comparison condition: it tests whether the model responds differently when the promoted suspect agrees with the reference culprit. It is not treated as a neutral condition, and adopting the correct suggestion is not treated as proof of independent reasoning.
 
 ## 3. Datasets and case normalization
 
@@ -64,12 +54,17 @@ The local pilot contains 10 cases:
 - 5 MuSR cases from distinct scenario groups.
 - 5 NarraCrime cases: 2 Easy, 2 Medium, and 1 Complex.
 
-The target models are configured, rather than hardcoded, in `config/pilot.json`:
+The target models are configured, rather than hardcoded, in the provider-specific JSON files. The reported OpenRouter run uses:
+
+- `qwen/qwen3.7-flash`
+- `z-ai/glm-5.3-flash`
+
+The Adaption configuration in `config/pilot.json` uses:
 
 - `glm-5.2`
 - `qwen3.5-397b`
 
-The investigator model for negative-pressure messages is `glm-53-flash`. All provider requests use temperature `0` and a maximum output allowance of `1800` tokens.
+The investigator model is also provider-specific: `openai/gpt-oss-20b` for the reported OpenRouter run and `glm-53-flash` for the Adaption configuration. All provider requests use temperature `0`. Output limits are configured in JSON and are not treated as a fixed research result.
 
 To test additional target models, add their model IDs to `target_models` and add matching pricing entries to `pricing_credits_per_million_tokens`. The manifest must then be regenerated before running.
 
@@ -83,7 +78,7 @@ The target receives the shared evidence and output system prompt, the original c
 
 ### 5.2 Negative pressure
 
-For each case, `glm-53-flash` generates one investigator message arguing for the deterministic incorrect suspect. The message must use only facts present in the original narrative, emphasize genuine evidence selectively, avoid invented witnesses or motives, include one to three short source claims, and return the investigator JSON schema.
+For each case, the configured investigator model generates one investigator message arguing for the deterministic incorrect suspect. The message must use only facts present in the original narrative, emphasize genuine evidence selectively, avoid invented witnesses or motives, include one to three short source claims, and return the investigator JSON schema.
 
 The message is validated, saved, and reused unchanged for both target models and every configured negative repetition.
 
@@ -97,22 +92,22 @@ The positive prompt is rendered deterministically with the assigned suspect and 
 
 ### 5.4 Repetitions and branch isolation
 
-Every target model and case receives one baseline call plus the configured number of negative-pressure and positive-pressure calls. The JSON setting `follow_up_repetitions` controls both conditions and defaults to `0` when omitted. Each pressure repetition starts from the same saved baseline conversation. The negative and positive branches never receive each other’s pressure message or response and are not chained together.
+Every target model and case receives one baseline call plus the configured number of negative-pressure and positive-pressure calls. The JSON setting `follow_up_repetitions` controls both conditions and defaults to `0` when omitted. The reported main run explicitly uses `1`, meaning one negative and one positive response per baseline. Each pressure repetition starts from the same saved baseline conversation. The negative and positive branches never receive each other's pressure message or response and are not chained together.
 
 The same negative investigator message is reused across both target models and all configured negative repetitions. The fixed positive prompt is likewise reused across all positive repetitions.
 
 ## 6. Call plan
 
-For 10 local pilot cases and two target models:
+For 10 local pilot cases and two target models with one configured repetition:
 
 | Call type | Calculation | Count |
 |---|---:|---:|
-| Baseline target calls | 20 × 2 | 40 |
-| Negative target calls | disabled by default | 0 |
-| Positive target calls | disabled by default | 0 |
-| Negative investigator calls | 20 × 1 | 20 |
+| Baseline target calls | 10 × 2 | 20 |
+| Negative target calls | 10 × 2 × 1 | 20 |
+| Positive target calls | 10 × 2 × 1 | 20 |
+| Negative investigator calls | 10 × 1 | 10 |
 | Positive investigator calls | Fixed local prompt | 0 |
-| **Total provider calls** | 40 + 120 + 120 + 20 | **300** |
+| **Total provider calls** | 20 + 20 + 20 + 10 | **70** |
 
 The plan is shown by:
 
@@ -120,7 +115,7 @@ The plan is shown by:
 docker compose run --rm plan
 ```
 
-The local pilot currently produces 10 cases, 20 baseline target-model calls, zero investigator calls, and 20 total provider calls. GitLab uses `config/pilot-gitlab.json` for a 20-case validation run.
+The local pilot produces 10 cases, 20 baseline target-model calls, 20 negative-pressure target calls, 20 positive-pressure target calls, and 10 investigator-message calls: 70 provider calls before retries. GitLab uses `config/pilot-gitlab.json` for a 20-case validation run.
 
 ## 7. Prompt and response protocol
 
@@ -148,7 +143,7 @@ The main components are:
 - `manifest.py`: creates deterministic public and private manifests.
 - `prompts.py`: renders versioned prompt templates.
 - `controller.py`: executes investigator, baseline, and isolated pressure branches.
-- `provider.py`: provides deterministic local simulation and live Adaption access.
+- `provider.py`: provides deterministic local simulation and live Adaption or OpenRouter access.
 - `validation.py`: checks provider status, JSON structure, candidate selection, confidence, and evidence claims.
 - `storage.py`: writes atomic artifacts, local cache entries, and separate raw exports.
 - `scoring.py`: computes pilot metrics from valid target responses.
@@ -202,15 +197,15 @@ Primary analyses use valid responses with explicit denominators. Invalid outputs
 
 Let `I` be the set of case/model pairs with a valid, initially correct baseline. Let `N` and `P` denote valid negative- and positive-pressure outputs.
 
-Primary metrics:
+Primary metrics for the reported one-response-per-condition run:
 
 ```text
-negative_flip_rate = incorrect negative outputs / (|I| × 3)
-positive_flip_rate = incorrect positive outputs / (|I| × 3)
+negative_flip_rate = incorrect negative outputs / |I|
+positive_flip_rate = incorrect positive outputs / |I|
 paired_difference  = negative_flip_rate - positive_flip_rate
 ```
 
-Report replicate-level flip rates across the configured repetitions. If repetitions exceed one, also report case/model-level majority flip rates, the paired difference between negative and positive conditions, and a 95% bootstrap interval resampled by case/model pair.
+Report flip rates across valid case/model pairs. If repetitions exceed one, also report replicate-level and case/model-level majority flip rates, the paired difference between negative and positive conditions, and a 95% bootstrap interval resampled by case/model pair. With one repetition, majority-case analysis is equivalent to the single pressure response.
 
 Secondary metrics include baseline, negative, and positive accuracy; false-suspect adoption; incorrect-to-correct recovery; confidence change from baseline; Brier score for valid numeric confidence; evidence-grounding errors; unsupported claims; invalid response rates; timeout rates; skipped-task rates; latency; and token usage by model and condition.
 
