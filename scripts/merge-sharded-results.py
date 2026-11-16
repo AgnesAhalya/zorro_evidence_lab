@@ -83,7 +83,16 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
     root = Path(args.summary_root)
-    paths = sorted(root.glob("**/shard-*/run_summary.json"))
+    # GitHub may add an artifact-name directory or preserve the uploaded path.
+    # Discover summaries recursively rather than assuming one layout.
+    paths = sorted(
+        path
+        for path in root.glob("**/run_summary.json")
+        if any(part.startswith("shard-") for part in path.parts)
+        or "shard-" in path.as_posix()
+    )
+    if len(paths) != 5:
+        raise ValueError(f"Expected 5 shard summaries, found {len(paths)}")
     print(json.dumps(merge(args.config, paths, Path(args.output_dir)), indent=2))
 
 

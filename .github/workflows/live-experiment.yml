@@ -163,7 +163,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: github-live-${{ inputs.scope }}-shard-*
-          merge-multiple: true
+          # Keep each artifact in its own directory so same-named files from
+          # different shards cannot overwrite one another.
+          merge-multiple: false
           path: shard-results
       - name: Merge shard summaries
         shell: bash
@@ -176,7 +178,7 @@ jobs:
           fi
           python scripts/merge-sharded-results.py \
             --config "$config" \
-            --summary-root shard-results/pilot/artifacts \
+            --summary-root shard-results \
             --output-dir merged-results
       - name: Upload merged results
         uses: actions/upload-artifact@v4

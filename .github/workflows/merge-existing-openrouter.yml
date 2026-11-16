@@ -1,0 +1,65 @@
+name: Merge Existing OpenRouter Results
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "GitHub Actions run ID containing the completed shard jobs"
+        required: true
+        type: string
+      scope:
+        description: "Which existing OpenRouter run to merge"
+        required: true
+        type: choice
+        options:
+          - main-openrouter
+          - pilot-openrouter
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  merge:
+    name: Merge existing ${{ inputs.scope }} artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package
+        run: python -m pip install -e .
+      - name: Download the five completed shard artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          set -euo pipefail
+          mkdir -p existing-shards
+          for shard in 0 1 2 3 4; do
+            gh run download "$SOURCE_RUN_ID" \
+              --repo "$GITHUB_REPOSITORY" \
+              --name "github-live-${SCOPE}-shard-${shard}" \
+              --dir "existing-shards/shard-${shard}"
+          done
+      - name: Merge existing results without provider calls
+        env:
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          set -euo pipefail
+          if [[ "$SCOPE" == "pilot-openrouter" ]]; then
+            config="config/pilot-openrouter.json"
+          else
+            config="config/main-openrouter.json"
+          fi
+          python scripts/merge-sharded-results.py \
+            --config "$config" \
+            --summary-root existing-shards \
+            --output-dir merged-results
+      - name: Upload merged report
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-live-${{ inputs.scope }}-merged-recovered
+          path: merged-results/
