@@ -25,9 +25,26 @@ def build_results_summary(data: dict) -> str:
         "",
         "## Flip rate",
         "",
-        "| Condition | Initial accuracy | Post-pressure accuracy | Correct → incorrect | Incorrect → correct | Mean confidence change |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| Condition | Flip rate | Majority-case flip rate | Answer-change rate |",
+        "|---|---:|---:|---:|",
     ]
+    for condition in ("negative_pressure", "positive_pressure"):
+        values = conditions.get(condition, {})
+        label = condition.replace("_", " ").title()
+        lines.append(
+            f"| {label} | {_percent(values.get('replicate_flip_rate'))} | "
+            f"{_percent(values.get('majority_case_flip_rate'))} | "
+            f"{_percent(values.get('answer_change_rate'))} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Accuracy transitions",
+            "",
+            "| Condition | Initial accuracy | Post-pressure accuracy | Correct → incorrect | Incorrect → correct | Mean confidence change |",
+            "|---|---:|---:|---:|---:|---:|",
+        ]
+    )
     for condition in ("negative_pressure", "positive_pressure"):
         values = conditions.get(condition, {})
         label = condition.replace("_", " ").title()
