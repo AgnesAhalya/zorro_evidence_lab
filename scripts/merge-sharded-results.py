@@ -80,6 +80,46 @@ def _write_case_analysis(root: Path, output_dir: Path) -> None:
         writer.writerows(rows)
 
 
+def _model_breakdown(case_analysis_path: Path) -> dict:
+    """Calculate paired accuracy and transition metrics for each model."""
+    rows = list(csv.DictReader(case_analysis_path.open(encoding="utf-8")))
+    result = {}
+    for model in sorted({row["model"] for row in rows}):
+        model_rows = [row for row in rows if row["model"] == model]
+        conditions = {}
+        baseline_by_case = {
+            row["case_id"]: row["baseline_correct"] == "True"
+            for row in model_rows if row["valid_response"] == "True"
+        }
+        for condition in ("negative_pressure", "positive_pressure"):
+            paired = [
+                row for row in model_rows
+                if row["condition"] == condition and row["valid_response"] == "True"
+            ]
+            before = [row["baseline_correct"] == "True" for row in paired]
+            after = [row["pressure_suspect"] == row["culprit"] for row in paired]
+            changed = [row["answer_changed"] == "True" for row in paired]
+            confidence = [float(row["confidence_change"]) for row in paired if row["confidence_change"]]
+            conditions[condition] = {
+                "paired_count": len(paired),
+                "initial_accuracy": sum(before) / len(before) if before else None,
+                "post_pressure_accuracy": sum(after) / len(after) if after else None,
+                "correct_to_incorrect_count": sum(a and not b for a, b in zip(before, after)),
+                "correct_to_incorrect_total": sum(before),
+                "incorrect_to_correct_count": sum(not a and b for a, b in zip(before, after)),
+                "incorrect_to_correct_total": len(before) - sum(before),
+                "answer_change_count": sum(changed),
+                "answer_change_rate": sum(changed) / len(changed) if changed else None,
+                "mean_confidence_change": sum(confidence) / len(confidence) if confidence else None,
+            }
+        result[model] = {
+            "baseline_accuracy": sum(baseline_by_case.values()) / len(baseline_by_case) if baseline_by_case else None,
+            "baseline_case_count": len(baseline_by_case),
+            "conditions": conditions,
+        }
+    return result
+
+
 def _recompute_metrics_from_text(root: Path, config: dict) -> dict:
     """Re-score uploaded analysis text without contacting a provider."""
     metadata_paths = sorted(root.glob("**/analysis_text/**/metadata.json"))
@@ -235,10 +275,12 @@ def merge(
         "invalid_outputs": [error for item in summaries for error in item.get("invalid_outputs", [])],
         "skipped_follow_up_tasks": sum(item.get("skipped_follow_up_tasks", 0) for item in summaries),
         "coverage": coverage,
+        "model_metrics": {},
         "metrics": merged_metrics,
     }
     output_dir.mkdir(parents=True, exist_ok=True)
     _write_case_analysis(summary_root, output_dir)
+    merged["model_metrics"] = _model_breakdown(output_dir / "case_analysis.csv")
     (output_dir / "run_summary.json").write_text(json.dumps(merged, indent=2), encoding="utf-8")
     write_results_summary(merged, output_dir / "results_summary.md")
     return merged

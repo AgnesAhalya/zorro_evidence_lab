@@ -79,6 +79,27 @@ def build_results_summary(data: dict) -> str:
     lines.extend(
         [
             "",
+            "## Model-wise variation",
+            "",
+            "| Model | Condition | Initial accuracy | Post-pressure accuracy | Correct → incorrect | Incorrect → correct | Answer-change rate | Mean confidence change |",
+            "|---|---|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for model, model_values in sorted(data.get("model_metrics", {}).items()):
+        for condition in ("negative_pressure", "positive_pressure"):
+            values = model_values.get("conditions", {}).get(condition, {})
+            label = condition.replace("_", " ").title()
+            lines.append(
+                f"| `{model}` | {label} | {_percent(values.get('initial_accuracy'))} | "
+                f"{_percent(values.get('post_pressure_accuracy'))} | "
+                f"{values.get('correct_to_incorrect_count', 0)}/{values.get('correct_to_incorrect_total', 0)} | "
+                f"{values.get('incorrect_to_correct_count', 0)}/{values.get('incorrect_to_correct_total', 0)} | "
+                f"{_percent(values.get('answer_change_rate'))} | "
+                f"{values.get('mean_confidence_change', '—')} points |"
+            )
+    lines.extend(
+        [
+            "",
             "## Case coverage",
             "",
             "| Stage | At least one model valid | Both target models valid |",
